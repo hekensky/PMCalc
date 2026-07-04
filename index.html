@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>RM Calculator</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <h1>📊 RM Калькулятор</h1>
+            <p class="subtitle">Risk Management Calculator</p>
+        </div>
+
+        <div class="inputs-section">
+            <div class="input-group">
+                <label for="deposit">💰 Депозит (USDT)</label>
+                <input type="number" id="deposit" placeholder="1000" step="any" inputmode="decimal">
+            </div>
+
+            <div class="input-group">
+                <label for="entry">📍 Точка входа</label>
+                <input type="number" id="entry" placeholder="65000" step="any" inputmode="decimal">
+            </div>
+
+            <div class="input-group">
+                <label for="stop">🛑 Стоп-лосс</label>
+                <input type="number" id="stop" placeholder="63000" step="any" inputmode="decimal">
+            </div>
+
+            <div class="input-group">
+                <label for="risk">⚠️ Риск (%)</label>
+                <input type="number" id="risk" placeholder="2" step="any" inputmode="decimal" min="0" max="100">
+            </div>
+
+            <div class="input-group">
+                <label for="leverage">🔗 Плечо</label>
+                <div class="leverage-selector">
+                    <button class="lev-btn active" data-lev="1">1x</button>
+                    <button class="lev-btn" data-lev="2">2x</button>
+                    <button class="lev-btn" data-lev="3">3x</button>
+                    <button class="lev-btn" data-lev="5">5x</button>
+                    <button class="lev-btn" data-lev="10">10x</button>
+                    <button class="lev-btn" data-lev="20">20x</button>
+                    <button class="lev-btn" data-lev="50">50x</button>
+                    <button class="lev-btn" data-lev="100">100x</button>
+                </div>
+                <input type="number" id="leverage" placeholder="или введите..." step="any" inputmode="decimal" min="1" value="1">
+            </div>
+        </div>
+
+        <button class="calc-btn" id="calcBtn" onclick="calculate()">Рассчитать</button>
+
+        <div class="results" id="results">
+            <div class="result-card">
+                <div class="result-row">
+                    <span class="result-label">📐 Направление</span>
+                    <span class="result-value" id="direction">—</span>
+                </div>
+                <div class="result-divider"></div>
+                <div class="result-row">
+                    <span class="result-label">💵 Сумма риска</span>
+                    <span class="result-value" id="riskAmount">—</span>
+                </div>
+                <div class="result-divider"></div>
+                <div class="result-row">
+                    <span class="result-label">📏 Размер стопа</span>
+                    <span class="result-value" id="stopSize">—</span>
+                </div>
+                <div class="result-divider"></div>
+                <div class="result-row highlight">
+                    <span class="result-label">📊 Размер позиции</span>
+                    <span class="result-value" id="positionSize">—</span>
+                </div>
+                <div class="result-divider"></div>
+                <div class="result-row">
+                    <span class="result-label">🔐 Маржа (залог)</span>
+                    <span class="result-value" id="margin">—</span>
+                </div>
+                <div class="result-divider"></div>
+                <div class="result-row">
+                    <span class="result-label">📉 Убыток при стопе</span>
+                    <span class="result-value loss" id="lossAtStop">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="error-msg" id="errorMsg"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
