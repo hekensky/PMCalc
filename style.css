@@ -5,6 +5,348 @@
 }
 
 :root {
+    --bg: #0a0e1a;
+    --card: rgba(255, 255, 255, 0.04);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --text: #f0f0f5;
+    --text-secondary: #7a8299;
+    --green: #00e59b;
+    --green-bg: rgba(0, 229, 155, 0.1);
+    --red: #ff4d6a;
+    --red-bg: rgba(255, 77, 106, 0.1);
+    --blue: #4e7cff;
+    --blue-glow: rgba(78, 124, 255, 0.25);
+    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-border: rgba(255, 255, 255, 0.1);
+    --input-focus: rgba(78, 124, 255, 0.4);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+/* Animated background gradient */
+body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(78, 124, 255, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(0, 229, 155, 0.05) 0%, transparent 50%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.app {
+    position: relative;
+    z-index: 1;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 20px 20px 40px;
+}
+
+/* ── Header ── */
+.header {
+    text-align: center;
+    padding: 24px 0 28px;
+}
+
+.header h1 {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff 0%, #a0b4ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 6px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+/* ── Inputs ── */
+.inputs-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+    padding-left: 4px;
+}
+
+.input-group input[type="number"] {
+    background: var(--input-bg);
+    border: 1.5px solid var(--input-border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text);
+    outline: none;
+    transition: all 0.25s ease;
+    -webkit-appearance: none;
+    appearance: none;
+    backdrop-filter: blur(10px);
+}
+
+.input-group input[type="number"]:focus {
+    border-color: var(--blue);
+    background: rgba(78, 124, 255, 0.06);
+    box-shadow: 0 0 0 4px var(--blue-glow);
+}
+
+.input-group input[type="number"]::placeholder {
+    color: rgba(255, 255, 255, 0.15);
+    font-weight: 400;
+}
+
+/* Remove spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+/* ── Leverage ── */
+.leverage-selector {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.lev-btn {
+    padding: 12px 4px;
+    background: var(--input-bg);
+    border: 1.5px solid var(--input-border);
+    border-radius: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+}
+
+.lev-btn:active {
+    transform: scale(0.93);
+}
+
+.lev-btn.active {
+    background: linear-gradient(135deg, var(--blue), #6e9bff);
+    border-color: var(--blue);
+    color: #fff;
+    box-shadow: 0 4px 16px var(--blue-glow);
+}
+
+/* ── Calculate Button ── */
+.calc-btn {
+    width: 100%;
+    margin-top: 24px;
+    padding: 18px;
+    background: linear-gradient(135deg, #4e7cff 0%, #6e9bff 50%, #4e7cff 100%);
+    background-size: 200% 100%;
+    border: none;
+    border-radius: 16px;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    letter-spacing: 0.5px;
+    box-shadow: 0 8px 32px var(--blue-glow), 0 2px 8px rgba(0,0,0,0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.calc-btn::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    transition: left 0.5s;
+}
+
+.calc-btn:hover::after {
+    left: 100%;
+}
+
+.calc-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 4px 16px var(--blue-glow);
+}
+
+/* ── Results ── */
+.results {
+    margin-top: 24px;
+    display: none;
+}
+
+.results.show {
+    display: block;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.result-card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 8px 20px;
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 0;
+}
+
+.result-row.highlight {
+    padding: 20px 0;
+    position: relative;
+}
+
+.result-row.highlight::before {
+    content: '';
+    position: absolute;
+    inset: 8px 0;
+    background: var(--green-bg);
+    border-radius: 12px;
+    z-index: -1;
+}
+
+.result-row.highlight .result-value {
+    font-size: 22px;
+    color: var(--green);
+    font-weight: 800;
+}
+
+.result-row.highlight .result-label {
+    color: var(--green);
+    font-weight: 600;
+}
+
+.result-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.result-value {
+    font-size: 15px;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-value.loss {
+    color: var(--red);
+}
+
+.result-value.long {
+    color: var(--green);
+    background: var(--green-bg);
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.result-value.short {
+    color: var(--red);
+    background: var(--red-bg);
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.result-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--card-border), transparent);
+}
+
+/* ── Error ── */
+.error-msg {
+    margin-top: 16px;
+    padding: 16px 18px;
+    background: var(--red-bg);
+    border: 1px solid rgba(255, 77, 106, 0.2);
+    border-radius: 14px;
+    color: var(--red);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    display: none;
+    backdrop-filter: blur(10px);
+}
+
+.error-msg.show {
+    display: block;
+    animation: shake 0.4s ease, slideUp 0.3s ease;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-6px); }
+    40% { transform: translateX(6px); }
+    60% { transform: translateX(-4px); }
+    80% { transform: translateX(4px); }
+}
+
+/* ── Telegram overrides ── */
+body.telegram {
+    background: var(--tg-theme-bg-color, var(--bg));
+    color: var(--tg-theme-text-color, var(--text));
+}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
     --bg: #1a1a2e;
     --card: #16213e;
     --accent: #0f3460;
