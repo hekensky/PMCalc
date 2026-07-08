@@ -46,7 +46,6 @@ def build_application() -> Application:
     scheduler = AsyncIOScheduler()
     scheduler.start()
     application.bot_data['scheduler'] = scheduler
-    application.bot._scheduler = scheduler
 
     new_trade_conv = ConversationHandler(
         entry_points=[
