@@ -98,6 +98,17 @@ body::before {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+    width: 100%;
+}
+
+.input-row > .input-group {
+    min-width: 0;
+    width: 100%;
+}
+
+.input-row .input-group input[type="number"] {
+    width: 100%;
+    min-width: 0;
 }
 
 /* ── Inputs ── */
@@ -122,6 +133,8 @@ body::before {
 }
 
 .input-group input[type="number"] {
+    width: 100%;
+    min-width: 0;
     background: var(--input-bg);
     border: 1.5px solid var(--input-border);
     border-radius: 14px;
