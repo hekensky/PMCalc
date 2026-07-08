@@ -13,16 +13,19 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import database as db
 from bot import (
     start, new_trade, ticker_received, entry_received, stop_received,
     take_received, setup_selected, open_comment_received, active_trades,
     close_trade_start, close_outcome_selected, close_comment_received,
-    close_photo_received, finish_close, history, stats, export_csv,
+    close_pnl_received, close_photo_received, history, stats, export_csv,
+    remind_command, remind_select, remind_time_received,
     main_menu_keyboard, menu_handler, cancel,
     TICKER, ENTRY, STOP, TAKE, SETUP, OPEN_COMMENT,
-    CLOSE_OUTCOME, CLOSE_COMMENT, CLOSE_PHOTO,
+    CLOSE_OUTCOME, CLOSE_COMMENT, CLOSE_PNL, CLOSE_PHOTO,
+    REMIND_SELECT, REMIND_TIME,
 )
 
 logging.basicConfig(
@@ -39,6 +42,11 @@ PORT = int(os.environ.get('PORT', 10000))
 def build_application() -> Application:
     db.init_db()
     application = Application.builder().token(TOKEN).build()
+
+    scheduler = AsyncIOScheduler()
+    scheduler.start()
+    application.bot_data['scheduler'] = scheduler
+    application.bot._scheduler = scheduler
 
     new_trade_conv = ConversationHandler(
         entry_points=[
@@ -61,6 +69,7 @@ def build_application() -> Application:
         states={
             CLOSE_OUTCOME: [CallbackQueryHandler(close_outcome_selected, pattern='^(outcome:|cancel_close)')],
             CLOSE_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, close_comment_received)],
+            CLOSE_PNL: [MessageHandler(filters.TEXT & ~filters.COMMAND, close_pnl_received)],
             CLOSE_PHOTO: [
                 MessageHandler(filters.PHOTO, close_photo_received),
                 MessageHandler(filters.Regex(r'^-$'), close_photo_received),
@@ -69,9 +78,22 @@ def build_application() -> Application:
         fallbacks=[CommandHandler('cancel', cancel)],
     )
 
+    remind_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler('remind', remind_command),
+            CallbackQueryHandler(menu_handler, pattern='^menu:remind$')
+        ],
+        states={
+            REMIND_SELECT: [CallbackQueryHandler(remind_select, pattern='^remind_select:')],
+            REMIND_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_time_received)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
     application.add_handler(CommandHandler('start', start))
     application.add_handler(new_trade_conv)
     application.add_handler(close_trade_conv)
+    application.add_handler(remind_conv)
     application.add_handler(CommandHandler('active', active_trades))
     application.add_handler(CommandHandler('history', history))
     application.add_handler(CommandHandler('stats', stats))

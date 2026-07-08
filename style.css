@@ -60,6 +60,20 @@ body::before {
     padding: 24px 0 28px;
 }
 
+.header .logo {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 12px;
+    background: linear-gradient(135deg, rgba(78, 124, 255, 0.2), rgba(0, 229, 155, 0.15));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    backdrop-filter: blur(10px);
+}
+
 .header h1 {
     font-size: 28px;
     font-weight: 800;
@@ -77,6 +91,13 @@ body::before {
     font-weight: 400;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+}
+
+/* ── Input row ── */
+.input-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
 }
 
 /* ── Inputs ── */
@@ -212,6 +233,70 @@ input[type="number"] {
 .results {
     margin-top: 24px;
     display: none;
+}
+
+.copy-all-btn {
+    width: 100%;
+    margin-top: 14px;
+    padding: 14px;
+    background: var(--input-bg);
+    border: 1.5px solid var(--input-border);
+    border-radius: 14px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+}
+
+.copy-all-btn:active {
+    transform: scale(0.98);
+    background: rgba(78, 124, 255, 0.1);
+    border-color: var(--blue);
+    color: var(--text);
+}
+
+.copy-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 16px;
+    padding: 6px;
+    margin-left: 8px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.copy-btn:active {
+    opacity: 1;
+    transform: scale(0.9);
+}
+
+/* ── Toast ── */
+.toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: rgba(30, 35, 55, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text);
+    padding: 12px 24px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
 }
 
 .results.show {
