@@ -113,6 +113,7 @@ async def run_polling():
 
 
 async def run_webhook():
+    logger.info('Starting webhook mode...')
     application = build_application()
     await application.initialize()
 
@@ -120,17 +121,17 @@ async def run_webhook():
         return web.Response(text='OK')
 
     async def webhook(request):
-        data = await request.json()
-        await application.update_queue.put(Update.de_json(data, application.bot))
-        return web.Response(text='OK')
+        try:
+            data = await request.json()
+            await application.update_queue.put(Update.de_json(data, application.bot))
+            return web.Response(text='OK')
+        except Exception as e:
+            logger.exception('Error processing webhook')
+            return web.Response(text='Error', status=500)
 
     app = web.Application()
     app.router.add_get('/', health)
     app.router.add_post(f'/{TOKEN}', webhook)
-
-    await application.start()
-    await application.bot.set_webhook(WEBHOOK_URL)
-    logger.info(f'Webhook set to {WEBHOOK_URL}')
 
     runner = web.AppRunner(app)
     await runner.setup()
@@ -138,6 +139,15 @@ async def run_webhook():
     await site.start()
     logger.info(f'Server listening on port {PORT}')
 
+    try:
+        await application.bot.set_webhook(WEBHOOK_URL)
+        logger.info(f'Webhook set to {WEBHOOK_URL}')
+    except Exception as e:
+        logger.exception('Failed to set webhook')
+        raise
+
+    await application.start()
+    logger.info('Application started')
     await asyncio.Event().wait()
 
 
