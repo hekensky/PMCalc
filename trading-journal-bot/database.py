@@ -112,29 +112,42 @@ def add_trade(
 ) -> int:
     with get_connection() as conn:
         cur = conn.cursor()
-        cur.execute(
-            '''INSERT INTO trades
-               (user_id, ticker, entry_price, stop_loss, take_profit, setup_type,
-                direction, risk_reward, open_comment, status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-               RETURNING id'''
-            if IS_POSTGRES else
-            '''INSERT INTO trades
-               (user_id, ticker, entry_price, stop_loss, take_profit, setup_type,
-                direction, risk_reward, open_comment, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (
-                user_id, ticker.upper(), entry_price, stop_loss, take_profit,
-                setup_type,
-                _direction(entry_price, take_profit),
-                _risk_reward(entry_price, stop_loss, take_profit),
-                open_comment,
-                'pending'
+        if IS_POSTGRES:
+            cur.execute(
+                '''INSERT INTO trades
+                   (user_id, ticker, entry_price, stop_loss, take_profit, setup_type,
+                    direction, risk_reward, open_comment, status)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id''',
+                (
+                    user_id, ticker.upper(), entry_price, stop_loss, take_profit,
+                    setup_type,
+                    _direction(entry_price, take_profit),
+                    _risk_reward(entry_price, stop_loss, take_profit),
+                    open_comment,
+                    'pending'
+                )
             )
-        )
-        row = cur.fetchone()
+            row = cur.fetchone()
+            trade_id = row[0]
+        else:
+            cur.execute(
+                '''INSERT INTO trades
+                   (user_id, ticker, entry_price, stop_loss, take_profit, setup_type,
+                    direction, risk_reward, open_comment, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    user_id, ticker.upper(), entry_price, stop_loss, take_profit,
+                    setup_type,
+                    _direction(entry_price, take_profit),
+                    _risk_reward(entry_price, stop_loss, take_profit),
+                    open_comment,
+                    'pending'
+                )
+            )
+            trade_id = cur.lastrowid
         conn.commit()
-        return row[0]
+        return trade_id
 
 
 def _fetch_one(sql: str, params: tuple) -> Optional[Dict[str, Any]]:

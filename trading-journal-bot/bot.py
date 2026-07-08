@@ -133,11 +133,29 @@ async def take_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return TAKE
 
     keyboard = [[InlineKeyboardButton(t, callback_data=f'setup:{t}')] for t in SETUP_TYPES]
+    keyboard.append([InlineKeyboardButton('❌ Отмена', callback_data='cancel:conversation')])
     await update.message.reply_text(
         'Выбери тип сетапа:',
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return SETUP
+
+
+async def cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data.clear()
+    text = (
+        "Отменено.\n\n"
+        "<b>Команды:</b>\n"
+        "• /new — добавить сделку\n"
+        "• /active — активные позиции\n"
+        "• /history — история\n"
+        "• /stats — статистика\n"
+        "• /export — выгрузить CSV"
+    )
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=main_menu_keyboard())
+    return ConversationHandler.END
 
 
 async def setup_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -423,8 +441,17 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Отменено.', reply_markup=main_menu_keyboard())
     context.user_data.clear()
+    text = (
+        "Отменено.\n\n"
+        "<b>Команды:</b>\n"
+        "• /new — добавить сделку\n"
+        "• /active — активные позиции\n"
+        "• /history — история\n"
+        "• /stats — статистика\n"
+        "• /export — выгрузить CSV"
+    )
+    await update.message.reply_html(text, reply_markup=main_menu_keyboard())
     return ConversationHandler.END
 
 
@@ -467,6 +494,7 @@ def make_application(token: str) -> Application:
     )
 
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('cancel', cancel))
     application.add_handler(new_trade_conv)
     application.add_handler(close_trade_conv)
     application.add_handler(CommandHandler('active', active_trades))
@@ -476,6 +504,7 @@ def make_application(token: str) -> Application:
 
     # Global menu handler only for non-conversation menu callbacks
     application.add_handler(CallbackQueryHandler(menu_callback, pattern='^menu:'))
+    application.add_handler(CallbackQueryHandler(cancel_callback, pattern='^cancel:'))
 
     return application
 
