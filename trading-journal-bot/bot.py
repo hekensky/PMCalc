@@ -4,9 +4,8 @@ import io
 import asyncio
 import logging
 from datetime import datetime
-from typing import Optional
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -15,10 +14,10 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     filters,
+    PicklePersistence,
 )
 
 import database as db
-import charts
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -28,8 +27,7 @@ logger = logging.getLogger(__name__)
 
 # States
 TICKER, ENTRY, STOP, TAKE, SETUP, OPEN_COMMENT = range(6)
-CLOSE_OUTCOME, CLOSE_COMMENT, CLOSE_PNL, CLOSE_PHOTO = range(6, 10)
-REMIND_SELECT, REMIND_TIME = range(10, 12)
+CLOSE_OUTCOME, CLOSE_COMMENT, CLOSE_PHOTO = range(6, 9)
 
 SETUP_TYPES = [
     'Брейкаут', 'Отбой от уровня', 'Трендовое продолжение',
@@ -65,9 +63,6 @@ def format_trade(trade: dict) -> str:
     if trade['status'] in ('closed_tp', 'closed_sl', 'cancelled'):
         lines.append(f"\n📅 Открыта: {trade['created_at']}")
         lines.append(f"📅 Закрыта: {trade['closed_at']}")
-    if trade.get('pnl_amount') is not None:
-        pnl_emoji = '🟢' if trade['pnl_amount'] >= 0 else '🔴'
-        lines.append(f"{pnl_emoji} PnL: {trade['pnl_amount']:+.2f} USDT")
     if trade['close_comment']:
         outcome_text = {
             'closed_tp': '🏆 Итог:',
@@ -78,7 +73,6 @@ def format_trade(trade: dict) -> str:
     return '\n'.join(line for line in lines if line)
 
 
-# ─── DB wrappers (non-blocking) ───
 async def _db_call(func, *args, **kwargs):
     return await asyncio.to_thread(func, *args, **kwargs)
 
@@ -87,23 +81,21 @@ async def _db_call(func, *args, **kwargs):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "👋 Привет! Это <b>Журнал трейдера</b>.\n\n"
-        "Я помогу фиксировать сделки, анализировать результаты и учиться на ошибках.\n\n"
+        "Я помогу фиксировать сделки и анализировать результаты.\n\n"
         "<b>Команды:</b>\n"
-        "• /new — добавить новую сделку\n"
-        "• /active — активные позиции / идеи\n"
-        "• /history — история закрытых сделок\n"
-        "• /stats — статистика + графики\n"
-        "• /export — выгрузить журнал в CSV\n"
-        "• /remind — напоминание по активной позиции"
+        "• /new — добавить сделку\n"
+        "• /active — активные позиции\n"
+        "• /history — история\n"
+        "• /stats — статистика\n"
+        "• /export — выгрузить CSV"
     )
     await update.message.reply_html(text, reply_markup=main_menu_keyboard())
 
 
 # ─── New trade conversation ───
 async def new_trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        'Давай запишем новую сделку.\n\nВведи тикер (например, BTC):'
-    )
+    context.user_data.clear()
+    await update.message.reply_text('Введи тикер (например, BTC):')
     return TICKER
 
 
@@ -160,6 +152,16 @@ async def open_comment_received(update: Update, context: ContextTypes.DEFAULT_TY
     data = context.user_data
     data['open_comment'] = update.message.text.strip()
 
+    # Safety check
+    required = ['ticker', 'entry_price', 'stop_loss', 'take_profit']
+    missing = [f for f in required if f not in data]
+    if missing:
+        await update.message.reply_text(
+            f"Что-то пошло не так, не хватает данных: {', '.join(missing)}. Начни заново: /new"
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
     trade_id = await _db_call(
         db.add_trade,
         user_id=update.effective_user.id,
@@ -191,10 +193,9 @@ async def active_trades(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     for trade in trades:
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton('📝 Закрыть сделку', callback_data=f'close:{trade["id"]}')],
-            [InlineKeyboardButton('🔔 Напомнить', callback_data=f'remind:{trade["id"]}')]
-        ])
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton('📝 Закрыть сделку', callback_data=f'close:{trade["id"]}')
+        ]])
         await update.message.reply_html(format_trade(trade), reply_markup=keyboard)
 
 
@@ -239,8 +240,8 @@ async def close_outcome_selected(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['close_outcome'] = outcome
 
     prompts = {
-        'closed_tp': '🏆 Отлично! Почему сделка зашла? Напиши краткий разбор:',
-        'closed_sl': '📉 Что пошло не так? Напиши, почему стоп сработал:',
+        'closed_tp': '🏆 Отлично! Почему сделка зашла?',
+        'closed_sl': '📉 Что пошло не так? Почему стоп сработал?',
         'cancelled': '🚫 Почему сделка не дошла до входа?'
     }
     await query.edit_message_text(prompts[outcome])
@@ -252,18 +253,7 @@ async def close_comment_received(update: Update, context: ContextTypes.DEFAULT_T
     outcome = context.user_data['close_outcome']
 
     if outcome == 'cancelled':
-        return await finish_close(update, context, pnl=None, photo=None)
-
-    await update.message.reply_text('Введи PnL сделки в USDT (например, 150 или -75):')
-    return CLOSE_PNL
-
-
-async def close_pnl_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        context.user_data['close_pnl'] = float(update.message.text.replace(',', '.'))
-    except ValueError:
-        await update.message.reply_text('Нужно число. Попробуй ещё раз:')
-        return CLOSE_PNL
+        return await finish_close(update, context, photo=None)
 
     await update.message.reply_text(
         'Пришли скриншот PnL (или напиши "-" чтобы пропустить):'
@@ -275,14 +265,18 @@ async def close_photo_received(update: Update, context: ContextTypes.DEFAULT_TYP
     photo_file_id = None
     if update.message.photo:
         photo_file_id = update.message.photo[-1].file_id
-    pnl = context.user_data.get('close_pnl')
-    return await finish_close(update, context, pnl=pnl, photo=photo_file_id)
+    return await finish_close(update, context, photo=photo_file_id)
 
 
-async def finish_close(update: Update, context: ContextTypes.DEFAULT_TYPE, pnl: Optional[float], photo):
-    trade_id = context.user_data['close_trade_id']
-    outcome = context.user_data['close_outcome']
+async def finish_close(update: Update, context: ContextTypes.DEFAULT_TYPE, photo):
+    trade_id = context.user_data.get('close_trade_id')
+    outcome = context.user_data.get('close_outcome')
     comment = context.user_data.get('close_comment', '')
+
+    if not trade_id or not outcome:
+        await update.message.reply_text('Ошибка: данные закрытия потеряны. Начни заново.')
+        context.user_data.clear()
+        return ConversationHandler.END
 
     ok = await _db_call(
         db.close_trade,
@@ -290,7 +284,6 @@ async def finish_close(update: Update, context: ContextTypes.DEFAULT_TYPE, pnl: 
         user_id=update.effective_user.id,
         outcome=outcome,
         close_comment=comment,
-        pnl_amount=pnl,
         pnl_screenshot_file_id=photo
     )
 
@@ -302,8 +295,8 @@ async def finish_close(update: Update, context: ContextTypes.DEFAULT_TYPE, pnl: 
     trade = await _db_call(db.get_trade, trade_id, update.effective_user.id)
     messages = {
         'closed_tp': ('🏆 Сделка закрыта по тейку!', '🎉 Поздравляю с прибыльной сделкой!'),
-        'closed_sl': ('❌ Сделка закрыта по стопу.', 'Главное — контроль риска. Разберём ошибку и двигаемся дальше.'),
-        'cancelled': ('🚫 Сделка отменена.', 'Не дошла до точки входа — тоже результат. Записали.')
+        'closed_sl': ('❌ Сделка закрыта по стопу.', 'Главное — контроль риска. Двигаемся дальше.'),
+        'cancelled': ('🚫 Сделка отменена.', 'Не дошла до точки входа — тоже результат.')
     }
     header, footer = messages[outcome]
     caption = f'{header}\n\n{format_trade(trade)}\n\n{footer}'
@@ -349,11 +342,8 @@ async def history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── Stats ───
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    s = await _db_call(db.get_stats, user_id)
-    active_count = len(await _db_call(db.get_active_trades, user_id))
-    setup_dist = await _db_call(db.get_setup_distribution, user_id)
-    pnl_series = await _db_call(db.get_pnl_series, user_id)
+    s = await _db_call(db.get_stats, update.effective_user.id)
+    active_count = len(await _db_call(db.get_active_trades, update.effective_user.id))
 
     text = (
         f"📊 <b>Статистика</b>\n\n"
@@ -362,18 +352,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Стопов: <b>{s['losses']}</b> ❌\n"
         f"• Отменено: <b>{s['cancelled']}</b> 🚫\n\n"
         f"Win rate: <b>{s['win_rate']}%</b>\n"
-        f"Средний R/R на победных: <b>1:{s['avg_rr']}</b>\n"
-        f"Net PnL: <b>{s['net_pnl']:+.2f} USDT</b>\n\n"
+        f"Средний R/R на победных: <b>1:{s['avg_rr']}</b>\n\n"
         f"Активных позиций: <b>{active_count}</b>"
     )
-
-    chart_bytes = await asyncio.to_thread(charts.generate_stats_image, s, setup_dist, pnl_series)
-    await update.message.reply_photo(
-        photo=InputFile(io.BytesIO(chart_bytes), filename='stats.png'),
-        caption=text,
-        parse_mode='HTML',
-        reply_markup=main_menu_keyboard()
-    )
+    await update.message.reply_html(text, reply_markup=main_menu_keyboard())
 
 
 # ─── Export ───
@@ -388,15 +370,14 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     writer.writerow([
         'ID', 'Ticker', 'Direction', 'Entry', 'Stop', 'Take',
         'R/R', 'Setup', 'Open Comment', 'Status', 'Outcome',
-        'Close Comment', 'PnL', 'Created', 'Closed'
+        'Close Comment', 'Created', 'Closed'
     ])
     for t in trades:
         writer.writerow([
             t['id'], t['ticker'], t['direction'], t['entry_price'],
             t['stop_loss'], t['take_profit'], t['risk_reward'],
             t['setup_type'], t['open_comment'], t['status'],
-            t['outcome'], t['close_comment'], t['pnl_amount'],
-            t['created_at'], t['closed_at']
+            t['outcome'], t['close_comment'], t['created_at'], t['closed_at']
         ])
 
     output.seek(0)
@@ -409,90 +390,6 @@ async def export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ─── Reminders ───
-async def remind_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    trades = await _db_call(db.get_active_trades, user_id)
-    if not trades:
-        await update.message.reply_text('Нет активных сделок для напоминания.')
-        return
-
-    keyboard = [[InlineKeyboardButton(
-        f"#{t['id']} {t['ticker']} — {t['direction']}",
-        callback_data=f'remind_select:{t["id"]}'
-    )] for t in trades]
-    await update.message.reply_text(
-        'Выбери сделку для напоминания:',
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def remind_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    trade_id = int(query.data.split(':', 1)[1])
-    context.user_data['remind_trade_id'] = trade_id
-    await query.edit_message_text(
-        'Через сколько напомнить?\nНапиши в формате: <b>30m</b>, <b>2h</b> или <b>1d</b>',
-        parse_mode='HTML'
-    )
-
-
-async def remind_time_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip().lower()
-    multipliers = {'m': 60, 'h': 3600, 'd': 86400}
-    try:
-        unit = text[-1]
-        value = int(text[:-1])
-        seconds = value * multipliers[unit]
-    except (ValueError, KeyError, IndexError):
-        await update.message.reply_text('Неверный формат. Используй 30m, 2h или 1d.')
-        return
-
-    trade_id = context.user_data.get('remind_trade_id')
-    if not trade_id:
-        await update.message.reply_text('Ошибка: сделка не выбрана.')
-        return
-
-    trade = await _db_call(db.get_trade, trade_id, update.effective_user.id)
-    if not trade:
-        await update.message.reply_text('Сделка не найдена.')
-        return
-
-    scheduler = context.bot_data.get('scheduler')
-    if not scheduler:
-        await update.message.reply_text('Ошибка: планировщик не запущен.')
-        return
-
-    scheduler.add_job(
-        _send_reminder,
-        'date',
-        run_date=datetime.utcnow().timestamp() + seconds,
-        args=[update.effective_user.id, trade_id, update.get_bot()],
-        replace_existing=True,
-        id=f"reminder_{update.effective_user.id}_{trade_id}"
-    )
-
-    await update.message.reply_text(
-        f"🔔 Напоминание установлено через {text} для сделки #{trade_id} {trade['ticker']}."
-    )
-    context.user_data.pop('remind_trade_id', None)
-
-
-async def _send_reminder(user_id: int, trade_id: int, bot):
-    trade = await _db_call(db.get_trade, trade_id, user_id)
-    if not trade or trade['status'] not in ('pending', 'active'):
-        return
-    await bot.send_message(
-        chat_id=user_id,
-        text=f"🔔 Напоминание по сделке:\n\n{format_trade(trade)}",
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton('📝 Закрыть сделку', callback_data=f'close:{trade_id}')
-        ]])
-    )
-
-
 # ─── Helpers ───
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
@@ -500,33 +397,29 @@ def main_menu_keyboard():
         [InlineKeyboardButton('⏳ Активные', callback_data='menu:active'),
          InlineKeyboardButton('📜 История', callback_data='menu:history')],
         [InlineKeyboardButton('📊 Статистика', callback_data='menu:stats'),
-         InlineKeyboardButton('📤 Экспорт', callback_data='menu:export')],
-        [InlineKeyboardButton('🔔 Напоминание', callback_data='menu:remind')]
+         InlineKeyboardButton('📤 Экспорт', callback_data='menu:export')]
     ])
 
 
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Global menu callback for when user is NOT in a conversation."""
     query = update.callback_query
     await query.answer()
     action = query.data.split(':', 1)[1]
 
-    if action == 'new':
-        await query.edit_message_text('Давай запишем новую сделку.\n\nВведи тикер (например, BTC):')
-        context.user_data.clear()
-        return TICKER
-    elif action == 'active':
-        await query.edit_message_text('Загружаю активные сделки...')
+    if action == 'active':
         await active_trades(update, context)
     elif action == 'history':
-        await query.edit_message_text('Загружаю историю...')
         await history(update, context)
     elif action == 'stats':
-        await query.edit_message_text('Считаю статистику...')
         await stats(update, context)
     elif action == 'export':
         await export_csv(update, context)
-    elif action == 'remind':
-        await remind_command(update, context)
+    elif action == 'new':
+        await query.edit_message_text('Введи тикер (например, BTC):')
+        # Return TICKER so ConversationHandler can pick it up if registered,
+        # but as a standalone handler this just prepares the UI.
+        # The actual /new command and conversation entry point handle the flow.
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -535,21 +428,15 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# ─── Main ───
-def main():
+def make_application(token: str) -> Application:
     db.init_db()
-    token = os.environ['BOT_TOKEN']
-    application = Application.builder().token(token).build()
-
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    scheduler = AsyncIOScheduler()
-    scheduler.start()
-    application.bot_data['scheduler'] = scheduler
+    persistence = PicklePersistence(filepath='bot_persistence.pkl')
+    application = Application.builder().token(token).persistence(persistence).build()
 
     new_trade_conv = ConversationHandler(
         entry_points=[
             CommandHandler('new', new_trade),
-            CallbackQueryHandler(menu_handler, pattern='^menu:new$')
+            CallbackQueryHandler(new_trade, pattern='^menu:new$')
         ],
         states={
             TICKER: [MessageHandler(filters.TEXT & ~filters.COMMAND, ticker_received)],
@@ -560,6 +447,8 @@ def main():
             OPEN_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, open_comment_received)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+        name='new_trade',
+        persistent=True,
     )
 
     close_trade_conv = ConversationHandler(
@@ -567,38 +456,34 @@ def main():
         states={
             CLOSE_OUTCOME: [CallbackQueryHandler(close_outcome_selected, pattern='^(outcome:|cancel_close)')],
             CLOSE_COMMENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, close_comment_received)],
-            CLOSE_PNL: [MessageHandler(filters.TEXT & ~filters.COMMAND, close_pnl_received)],
             CLOSE_PHOTO: [
                 MessageHandler(filters.PHOTO, close_photo_received),
                 MessageHandler(filters.Regex(r'^-$'), close_photo_received),
             ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-    )
-
-    remind_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler('remind', remind_command),
-            CallbackQueryHandler(menu_handler, pattern='^menu:remind$')
-        ],
-        states={
-            REMIND_SELECT: [CallbackQueryHandler(remind_select, pattern='^remind_select:')],
-            REMIND_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, remind_time_received)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        name='close_trade',
+        persistent=True,
     )
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(new_trade_conv)
     application.add_handler(close_trade_conv)
-    application.add_handler(remind_conv)
     application.add_handler(CommandHandler('active', active_trades))
     application.add_handler(CommandHandler('history', history))
     application.add_handler(CommandHandler('stats', stats))
     application.add_handler(CommandHandler('export', export_csv))
 
-    application.add_handler(CallbackQueryHandler(menu_handler, pattern='^menu:'))
+    # Global menu handler only for non-conversation menu callbacks
+    application.add_handler(CallbackQueryHandler(menu_callback, pattern='^menu:'))
 
+    return application
+
+
+# ─── Main ───
+def main():
+    token = os.environ['BOT_TOKEN']
+    application = make_application(token)
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
